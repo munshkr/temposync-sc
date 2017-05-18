@@ -1,0 +1,7 @@
+(
+  \name: "TempoSync",
+  \summary: "Library for temposyncd",
+  \author: "Damián Silvani",
+  \version: 0.1,
+  \since: "2017"
+)
