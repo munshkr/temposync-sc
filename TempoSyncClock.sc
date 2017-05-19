@@ -20,12 +20,13 @@ TempoSyncClock {
 
   init {
     queue = PriorityQueue.new;
+    startTime = lastTickTime = Main.elapsedTime;
     beats = ticks = baseBar = baseBarBeat = 0;
 
     // Register Tick handler
     OSCdef(\tempoclocktick, { |msg, time, addr, recvPort|
       this.tick;
-    }, "/temposync/tick").permanent_(true);
+    }, "/temposync/tick");
   }
 
   start {
@@ -40,10 +41,14 @@ TempoSyncClock {
   }
 
   schedAbs { |beat, task|
+    beat.debug("beat (schedAbs)");
+    ticksPerBeat.debug("ticksPerBeat (schedAbs)");
     queue.put(beat * ticksPerBeat, task);
   }
 
   sched { |delta, item, adjustment = 0|
+    delta.debug("delta (sched)");
+    ticksPerBeat.debug("ticksPerBeat (sched)");
     queue.put((delta * ticksPerBeat) + ticks + adjustment, item);
   }
 
@@ -54,6 +59,8 @@ TempoSyncClock {
     nextTime = Main.elapsedTime;
     lastTickDelta = nextTime - (lastTickTime ? 0);
     lastTickTime = nextTime;
+    lastTickDelta.debug("lastTickDelta (tick)");
+    ticksPerBeat.debug("ticksPerBeat (tick)");
     tempo = (beatDur = lastTickDelta * ticksPerBeat).reciprocal;
 
     ticks = ticks + 1;
@@ -76,6 +83,8 @@ TempoSyncClock {
   nextTimeOnGrid { |quant = 1, phase = 0|
     var offset;
     "nextTimeOnGrid".postln;
+    beatsPerBar.debug("beatsPerBar (nextTimeOnGrid)");
+    quant.debug("quant (nextTimeOnGrid)");
     if (quant < 0) { quant = beatsPerBar * quant.neg };
     offset = baseBarBeat + phase;
     ^roundUp(this.beats - offset, quant) + offset;
@@ -95,11 +104,19 @@ TempoSyncClock {
   }
 
   beats2secs { |beats|
+    beats.debug("beats (beats2sec)");
+    beatDur.debug("beatDur (beats2sec)");
     ^beats * beatDur;
   }
 
   secs2beats { |seconds|
-    ^seconds * tempo;
+    seconds.debug("seconds (secs2beats)");
+    tempo.debug("tempo (secs2beats)");
+    if (tempo.isNil, {
+      ^0;
+    }, {
+      ^seconds * tempo;
+    });
   }
 
   // elapsed time doesn't make sense because this clock only advances when told
