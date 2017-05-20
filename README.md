@@ -23,7 +23,7 @@ Pdef(\test,
     \dur, 0.25,
     \instrument, \default,
   )
-).play(c, quant: 4);
+).play(quant: 1);
 )
 ```
 
