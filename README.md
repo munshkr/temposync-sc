@@ -13,7 +13,7 @@ methods that a `TempoClock` does.
 You could set is as the default clock like this:
 
 ```supercollider
-TempoClock.default = TempoSyncClock.new
+TempoClock.default = TempoSyncClock
 
 (
 Pdef(\test,
@@ -30,11 +30,11 @@ Pdef(\test,
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at
-https://github.com/munshkr/temposync-es. This project is intended to be a safe,
+https://github.com/munshkr/temposync-sc. This project is intended to be a safe,
 welcoming space for collaboration, and contributors are expected to adhere to
 the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
 
 ## License
 
-temposync-es is under the Apache 2.0 license. See the [LICENSE](LICENSE) file
+temposync-sc is under the Apache 2.0 license. See the [LICENSE](LICENSE) file
 for details.
