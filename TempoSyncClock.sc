@@ -5,55 +5,51 @@
 // by H. James Harkins -- jamshark70@dewdrop-world.net
 
 TempoSyncClock {
-  var  <>ticksPerBeat = 4;
+  classvar  <>ticksPerBeat = 4;
 
-  var  <ticks, <beats, <startTime,
-       <tempo, <beatDur,
-       <beatsPerBar = 4, <barsPerBeat = 0.25, <baseBar, <baseBarBeat;
+  classvar  <ticks, <beats, <startTime,
+            <tempo, <beatDur,
+            <beatsPerBar = 4, <barsPerBeat = 0.25, <baseBar, <baseBarBeat;
 
   // private vars
-  var  lastTickTime, <queue;
+  classvar  lastTickTime, <queue;
 
-  *new {
-    ^super.new.init;
-  }
-
-  init {
+  *initClass {
     queue = PriorityQueue.new;
     startTime = lastTickTime = Main.elapsedTime;
     beats = ticks = baseBar = baseBarBeat = 0;
+  }
 
-    // Register Tick handler
+  // If user tries to construct an instance, return singleton
+  *new { ^this }
+
+  *start {
+    // Register Tick responder
     OSCdef(\tempoclocktick, { |msg, time, addr, recvPort|
       this.tick;
     }, "/temposync/tick");
   }
 
-  start {
-    // FIXME should send message /start
-    startTime = lastTickTime = Main.elapsedTime;
-    ticks = beats = baseBar = baseBarBeat = 0;
+  *stop {
+    // Unregister Tick responder
+    OSCdef(\tempoclocktick).free;
   }
 
-  stop {
-    // FIXME should send message /stop
-    this.clear;
-  }
-
-  schedAbs { |beat, task|
+  *schedAbs { |beat, task|
     beat.debug("beat (schedAbs)");
     ticksPerBeat.debug("ticksPerBeat (schedAbs)");
     queue.put(beat * ticksPerBeat, task);
   }
 
-  sched { |delta, item, adjustment = 0|
+  *sched { |delta, item, adjustment = 0|
     delta.debug("delta (sched)");
     ticksPerBeat.debug("ticksPerBeat (sched)");
     queue.put((delta * ticksPerBeat) + ticks + adjustment, item);
   }
 
-  tick {
+  *tick {
     var  lastTickDelta, nextTime, task, tickIndex;
+
     // use nextTime as temp var to calculate tempo
     // this is inherently inaccurate; tempo will fluctuate slightly around base
     nextTime = Main.elapsedTime;
@@ -75,14 +71,13 @@ TempoSyncClock {
     });
   }
 
-  play { |task, quant = 1|
-    "play".postln;
+  *play { |task, quant = 1|
     this.schedAbs(quant.nextTimeOnGrid(this), task);
   }
 
-  nextTimeOnGrid { |quant = 1, phase = 0|
+  *nextTimeOnGrid { |quant = 1, phase = 0|
     var offset;
-    "nextTimeOnGrid".postln;
+
     beatsPerBar.debug("beatsPerBar (nextTimeOnGrid)");
     quant.debug("quant (nextTimeOnGrid)");
     if (quant < 0) { quant = beatsPerBar * quant.neg };
@@ -90,11 +85,11 @@ TempoSyncClock {
     ^roundUp(this.beats - offset, quant) + offset;
   }
 
-  beatsPerBar_ { |newBeatsPerBar = 4|
+  *beatsPerBar_ { |newBeatsPerBar = 4|
     this.setMeterAtBeat(newBeatsPerBar, beats)
   }
 
-  setMeterAtBeat { |newBeatsPerBar, beats|
+  *setMeterAtBeat { |newBeatsPerBar, beats|
     // bar must be integer valued when meter changes or confusion results later.
     baseBar = round((beats - baseBarBeat) * barsPerBeat + baseBar, 1);
     baseBarBeat = beats;
@@ -103,13 +98,13 @@ TempoSyncClock {
     this.changed;
   }
 
-  beats2secs { |beats|
+  *beats2secs { |beats|
     beats.debug("beats (beats2sec)");
     beatDur.debug("beatDur (beats2sec)");
     ^beats * beatDur;
   }
 
-  secs2beats { |seconds|
+  *secs2beats { |seconds|
     seconds.debug("seconds (secs2beats)");
     tempo.debug("tempo (secs2beats)");
     if (tempo.isNil, {
@@ -121,16 +116,14 @@ TempoSyncClock {
 
   // elapsed time doesn't make sense because this clock only advances when told
   // from outside - but, -play methods need elapsedBeats to calculate quant
-  elapsedBeats { ^beats }
-  seconds { ^startTime.notNil.if(Main.elapsedTime - startTime, nil) }
-
-  clear { queue.clear }
+  *elapsedBeats { ^beats }
+  *seconds { ^startTime.notNil.if(Main.elapsedTime - startTime, nil) }
 
   // for debugging
-  dumpQueue {
+  *dumpQueue {
     { queue.topPriority.notNil }.while({
       Post << "\n" << queue.topPriority << "\n";
-      queue.pop.dumpFromQueue;
+      queue.pop.debug("pop");
     });
   }
 }
