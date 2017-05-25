@@ -5,19 +5,24 @@
 // by H. James Harkins -- jamshark70@dewdrop-world.net
 
 TempoSyncClock {
-  classvar  <>ticksPerBeat = 4;
+  classvar  <barsPerBeat = 0.25,
+            <baseBar = 0,
+            <baseBarBeat = 0,
+            <beats = 0,
+            <beatsPerBar = 4,
+            <started = false,
+            <tempo = 1,
+            <ticks = 0,
+            <ticksPerBeat = 4;
 
-  classvar  <tempo = 1, <ticks, <beats,
-            <startTime, <beatDur, <beatsPerBar = 4, <barsPerBeat = 0.25,
-            <baseBar, <baseBarBeat;
+  classvar  <startTime, <beatDur;
 
   // Private vars
-  classvar  lastTickTime, <queue;
+  classvar  <queue;
 
   *initClass {
     queue = PriorityQueue.new;
-    startTime = lastTickTime = Main.elapsedTime;
-    beats = ticks = baseBar = baseBarBeat = 0;
+    startTime = Main.elapsedTime;
   }
 
   // If user tries to construct an instance, return singleton
@@ -26,11 +31,13 @@ TempoSyncClock {
   *start {
     // Register Tick responder
     OSCdef(\tempoclocktick, { |msg, time, addr, recvPort|
+      started = true;
       this.prTick(msg[1]);
     }, "/temposync/tick");
   }
 
   *stop {
+    started = false;
     // Unregister Tick responder
     OSCdef(\tempoclocktick).free;
   }
@@ -105,8 +112,9 @@ TempoSyncClock {
   // SystemClock.  Only tasks that need to be executed within the current tick
   // and the next one are scheduled with that clock.
   *prScheduleFromQueue {
-    //[].debug("prScheduleFromQueue");
+    if (started.not, {^nil});
 
+    //[].debug("prScheduleFromQueue");
     while ({(queue.topPriority??{inf}) - ticks < 1}, {
       var task, delta, accumDelta, tickDelta;
 
