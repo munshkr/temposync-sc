@@ -7,11 +7,11 @@
 TempoSyncClock {
   classvar  <>ticksPerBeat = 4;
 
-  classvar  <ticks, <beats, <startTime,
-            <tempo, <beatDur,
-            <beatsPerBar = 4, <barsPerBeat = 0.25, <baseBar, <baseBarBeat;
+  classvar  <tempo = 1, <ticks, <beats,
+            <startTime, <beatDur, <beatsPerBar = 4, <barsPerBeat = 0.25,
+            <baseBar, <baseBarBeat;
 
-  // private vars
+  // Private vars
   classvar  lastTickTime, <queue;
 
   *initClass {
@@ -26,7 +26,7 @@ TempoSyncClock {
   *start {
     // Register Tick responder
     OSCdef(\tempoclocktick, { |msg, time, addr, recvPort|
-      this.tick;
+      this.prTick(msg[1]);
     }, "/temposync/tick");
   }
 
@@ -36,50 +36,28 @@ TempoSyncClock {
   }
 
   *schedAbs { |beat, task|
-    beat.debug("beat (schedAbs)");
-    ticksPerBeat.debug("ticksPerBeat (schedAbs)");
     queue.put(beat * ticksPerBeat, task);
+    this.prScheduleFromQueue;
   }
 
-  *sched { |delta, item, adjustment = 0|
-    delta.debug("delta (sched)");
-    ticksPerBeat.debug("ticksPerBeat (sched)");
-    queue.put((delta * ticksPerBeat) + ticks + adjustment, item);
-  }
-
-  *tick {
-    var  lastTickDelta, nextTime, task, tickIndex;
-
-    // use nextTime as temp var to calculate tempo
-    // this is inherently inaccurate; tempo will fluctuate slightly around base
-    nextTime = Main.elapsedTime;
-    lastTickDelta = nextTime - (lastTickTime ? 0);
-    lastTickTime = nextTime;
-    lastTickDelta.debug("lastTickDelta (tick)");
-    ticksPerBeat.debug("ticksPerBeat (tick)");
-    tempo = (beatDur = lastTickDelta * ticksPerBeat).reciprocal;
-
-    ticks = ticks + 1;
-    beats = ticks / ticksPerBeat;
-
-    // while loop needed because more than one thing may be scheduled for this tick
-    { (queue.topPriority ?? { inf }) < ticks }.while({
-      // perform the action, and check if it should be rescheduled
-      (nextTime = (task = queue.pop).value(beats)).isNumber.if({
-        this.sched(nextTime, task, -1)
-      });
-    });
+  *sched { |delta, task, adjustment = 0|
+    // FIXME: Should include elapsed ticks from last tick
+    queue.put((delta * ticksPerBeat) + ticks + adjustment, task);
+    this.prScheduleFromQueue;
   }
 
   *play { |task, quant = 1|
     this.schedAbs(quant.nextTimeOnGrid(this), task);
   }
 
+  *clear {
+    ticks = beats = 0;
+    this.queue.clear;
+  }
+
   *nextTimeOnGrid { |quant = 1, phase = 0|
     var offset;
 
-    beatsPerBar.debug("beatsPerBar (nextTimeOnGrid)");
-    quant.debug("quant (nextTimeOnGrid)");
     if (quant < 0) { quant = beatsPerBar * quant.neg };
     offset = baseBarBeat + phase;
     ^roundUp(this.beats - offset, quant) + offset;
@@ -90,7 +68,7 @@ TempoSyncClock {
   }
 
   *setMeterAtBeat { |newBeatsPerBar, beats|
-    // bar must be integer valued when meter changes or confusion results later.
+    // Bar must be integer valued when meter changes or confusion results later.
     baseBar = round((beats - baseBarBeat) * barsPerBeat + baseBar, 1);
     baseBarBeat = beats;
     beatsPerBar = newBeatsPerBar;
@@ -99,14 +77,10 @@ TempoSyncClock {
   }
 
   *beats2secs { |beats|
-    beats.debug("beats (beats2sec)");
-    beatDur.debug("beatDur (beats2sec)");
     ^beats * beatDur;
   }
 
   *secs2beats { |seconds|
-    seconds.debug("seconds (secs2beats)");
-    tempo.debug("tempo (secs2beats)");
     if (tempo.isNil, {
       ^0;
     }, {
@@ -114,16 +88,64 @@ TempoSyncClock {
     });
   }
 
-  // elapsed time doesn't make sense because this clock only advances when told
-  // from outside - but, -play methods need elapsedBeats to calculate quant
   *elapsedBeats { ^beats }
   *seconds { ^startTime.notNil.if(Main.elapsedTime - startTime, nil) }
 
-  // for debugging
-  *dumpQueue {
-    { queue.topPriority.notNil }.while({
-      Post << "\n" << queue.topPriority << "\n";
-      queue.pop.debug("pop");
+  // Updates current clock state based on TICK message from server
+  *prTick { |sTempo|
+    tempo = sTempo;
+    ticks = ticks + 1;
+    if (ticks % ticksPerBeat == 0, {
+      beats = beats + 1;
     });
+    this.prScheduleFromQueue;
+  }
+
+  // Check queue if there is any Task that should be scheduled using the
+  // SystemClock.  Only tasks that need to be executed within the current tick
+  // and the next one are scheduled with that clock.
+  *prScheduleFromQueue {
+    //[].debug("prScheduleFromQueue");
+
+    while ({(queue.topPriority??{inf}) - ticks < 1}, {
+      var task, delta, accumDelta, tickDelta;
+
+      //(queue.topPriority - ticks).debug("queue.topPriority - ticks");
+      //(tempo * ticksPerBeat).debug("tempo * ticksPerBeat == 1/tickDelta");
+
+      delta = (queue.topPriority - ticks) / (tempo * ticksPerBeat);
+      //delta.debug("debug");
+      tickDelta = (tempo * ticksPerBeat).reciprocal;
+      accumDelta = delta;
+      task = queue.pop;
+
+      // Schedule a new Task with SystemClock, for all Tasks that must be
+      // executed until the next tick.
+      SystemClock.sched(delta, {
+        // FIXME: beats should include elapsed seconds from last tick
+        delta = task.value(this.beats);
+
+        if (delta.isNumber, {
+          accumDelta = accumDelta + delta;
+
+          //accumDelta.debug("[accumDelta] < tickDelta");
+          //tickDelta.debug("accumDelta < [tickDelta]");
+
+          if (accumDelta < tickDelta, {
+            // Return delta so that SystemClock reschedules task
+            delta;
+          }, {
+            // Schedule again using TempoSyncClock
+            //accumDelta.debug("going to schedule using queue");
+            queue.put((accumDelta * ticksPerBeat) + ticks, task);
+            // and return nil to avoid SystemClock to reschedule
+            nil;
+          });
+        }, {
+          nil;
+        });
+      });
+
+    }); // while
   }
 }
