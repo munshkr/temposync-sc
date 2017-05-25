@@ -118,7 +118,7 @@ TempoSyncClock {
       //(queue.topPriority - ticks).debug("queue.topPriority - ticks");
       //(tempo * ticksPerBeat).debug("tempo * ticksPerBeat == 1/tickDelta");
 
-      delta = (queue.topPriority - ticks) / (tempo * ticksPerBeat);
+      delta = ((queue.topPriority - ticks) % 1) / (tempo * ticksPerBeat);
       tickDelta = (tempo * ticksPerBeat).reciprocal;
       accumDelta = delta;
       task = queue.pop;
