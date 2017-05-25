@@ -47,9 +47,8 @@ TempoSyncClock {
     this.prScheduleFromQueue;
   }
 
-  *sched { |delta, task, adjustment = 0|
-    // FIXME: Should include elapsed ticks from last tick
-    queue.put((delta * ticksPerBeat) + ticks + adjustment, task);
+  *sched { |delta, task|
+    queue.put((delta * ticksPerBeat) + ticks, task);
     this.prScheduleFromQueue;
   }
 
@@ -102,9 +101,7 @@ TempoSyncClock {
   *prTick { |sTempo|
     tempo = sTempo;
     ticks = ticks + 1;
-    if (ticks % ticksPerBeat == 0, {
-      beats = beats + 1;
-    });
+    beats = beats + ticksPerBeat.reciprocal;
     this.prScheduleFromQueue;
   }
 
@@ -122,7 +119,6 @@ TempoSyncClock {
       //(tempo * ticksPerBeat).debug("tempo * ticksPerBeat == 1/tickDelta");
 
       delta = (queue.topPriority - ticks) / (tempo * ticksPerBeat);
-      //delta.debug("debug");
       tickDelta = (tempo * ticksPerBeat).reciprocal;
       accumDelta = delta;
       task = queue.pop;
