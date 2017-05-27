@@ -13,7 +13,8 @@ TempoSyncClock {
             <started = false,
             <tempo = 1,
             <ticks = 0,
-            <ticksPerBeat = 4;
+            <ticksPerBeat = 4,
+            <latency = 0.1;
 
   classvar  <startTime, <beatDur;
 
@@ -32,7 +33,7 @@ TempoSyncClock {
     // Register Tick responder
     OSCdef(\tempoclocktick, { |msg, time, addr, recvPort|
       started = true;
-      this.prTick(msg[1]);
+      this.prTick(msg[1], msg[2]);
     }, "/temposync/tick");
   }
 
@@ -98,11 +99,15 @@ TempoSyncClock {
   *seconds { ^startTime.notNil.if(Main.elapsedTime - startTime, nil) }
 
   // Updates current clock state based on TICK message from server
-  *prTick { |sTempo|
+  *prTick { |sTempo, sTicks|
     tempo = sTempo;
-    ticks = ticks + 1;
-    beats = beats + ticksPerBeat.reciprocal;
-    this.prScheduleFromQueue;
+    // Only update if server ticks is different. This is to avoid tracking a
+    // duplicate tick if server failed to respond on time to the original tick.
+    if (sTicks != ticks, {
+      ticks = ticks + 1;
+      beats = beats + ticksPerBeat.reciprocal;
+      this.prScheduleFromQueue;
+    });
   }
 
   // Check queue if there is any Task that should be scheduled using the
@@ -113,7 +118,7 @@ TempoSyncClock {
 
     //[].debug("prScheduleFromQueue");
     while ({(queue.topPriority??{inf}) - ticks < 1}, {
-      var task, delta, accumDelta, tickDelta;
+      var curTicks, task, delta, accumDelta, tickDelta;
 
       //(queue.topPriority - ticks).debug("queue.topPriority - ticks");
       //(tempo * ticksPerBeat).debug("tempo * ticksPerBeat == 1/tickDelta");
@@ -123,9 +128,19 @@ TempoSyncClock {
       accumDelta = delta;
       task = queue.pop;
 
+      // If tick is dropped, or server fails to send tick on time,
+      // generate a fake tick.
+      curTicks = ticks;
+      SystemClock.sched(tickDelta + latency, {
+        if (ticks == curTicks, {
+          "oops, tick dropped!".warn;
+          this.prTick(tempo, ticks + 1);
+        });
+      });
+
       // Schedule a new Task with SystemClock, for all Tasks that must be
       // executed until the next tick.
-      SystemClock.sched(delta, {
+      SystemClock.sched(delta + latency + latency, {
         // FIXME: beats should include elapsed seconds from last tick
         delta = task.value(this.beats);
 
